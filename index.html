@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORPG GAJA</title>
+    <meta name="description" content="손쉬운 ORPG 스크립트 정리 프로그램">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .container {
+            display: flex;
+            gap: 10px;
+        }
+        textarea, #output, #roll20-preview {
+            width: 48%;
+            height: 150px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            white-space: pre-wrap;
+            overflow: auto;
+        }
+        #roll20-preview {
+            background: #f9f9f9;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            margin-top: 16px;
+        }
+        
+        .styled-text {
+            display: block;
+        }
+        .style-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border: 1px solid #ccc;
+            padding: 5px;
+            margin: 5px 0;
+        }
+        .radio-group {
+            margin: 10px 0;
+        }
+        .radio-group label {
+            margin-right: 10px;
+        }
+        .button-container {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+        button {
+            padding: 10px;
+            flex: 1;
+            margin: 0 5px;
+        }
+    </style>
+</head>
+<body>
+    <h2>ORPG 스크립트 정리</h2>
+    <div class="radio-group">
+        <label><input type="radio" name="option" value="" checked></label>
+        <label><input type="radio" name="option" value="/desc" checked> /desc</label>
+        <label><input type="radio" name="option" value="/as"> /as</label>
+        <label><input type="radio" name="option" value="/emas"> /emas</label>
+    </div>
+    <div class="container">
+        <textarea id="inputText" placeholder="문장을 입력하세요..."></textarea>
+        <textarea id="styleText" placeholder="스타일 또는 링크 입력..."></textarea>
+    </div>
+    <div class="button-container">
+        <button onclick="processText()">변환</button>
+        <button onclick="copyText()">복사</button>
+    </div>
+    <div class="container">
+        <pre id="output" contenteditable="true"></pre>
+        <div id="roll20-preview"></div>
+    </div>
+
+    <hr>
+
+    <h3>저장된 스타일</h3>
+    <div>
+        <input style="min-width: 60%;" type="text" id="newStyle" placeholder="(#\" style=\"속성:값;속성:값;\")" />
+        <button onclick="saveStyle()">추가</button>
+    </div>
+    <div id="saved-styles"></div>
+    <script>
+        function processText() {
+            let input = document.getElementById("inputText").value.replace(/\n/g, ' '); // 모든 엔터 삭제
+            let rawStyle = document.getElementById("styleText").value.trim();
+            let option = document.querySelector('input[name="option"]:checked').value;
+
+            let sentences = [];
+            let currentSentence = "";
+            let inQuote = false;
+            let quoteType = "";
+
+            for (let i = 0; i < input.length; i++) {
+                let char = input[i];
+
+                if ((char === '"' || char === "'") && !inQuote) {
+                    inQuote = true;
+                    quoteType = char;
+                    currentSentence += char;
+                } else if (char === quoteType && inQuote) {
+                    inQuote = false;
+                    currentSentence += char;
+                    sentences.push(currentSentence.trim());
+                    currentSentence = "";
+                } else if (inQuote) {
+                    currentSentence += char;
+                } else if (/[.!?]/.test(char)) {
+                    currentSentence += char;
+                    sentences.push(currentSentence.trim());
+                    currentSentence = "";
+                } else {
+                    currentSentence += char;
+                }
+            }
+
+            if (currentSentence.trim()) {
+                sentences.push(currentSentence.trim());
+            }
+
+            let output = sentences.map(sentence => {
+                let formattedSentence = rawStyle ? `[${sentence}]${rawStyle}` : sentence;
+                return option + " " + formattedSentence;
+            }).join("\n");
+
+            // 스타일에서 (#" style= 또는 (#"style= 부분과 마지막 괄호 제거
+            let styleMatch = rawStyle.match(/\(#"?\s?style=\"(.*?)\)?$/);
+            let style = styleMatch ? styleMatch[1].trim() : "";
+            console.log(style)
+            
+            let outputPreview = sentences.map(sentence => {
+                return `<span class="styled-text" style="${style}">${sentence}</span>`;
+            }).join(" ");
+
+            document.getElementById("output").textContent = output;
+            document.getElementById("roll20-preview").innerHTML = outputPreview;
+        }
+
+        function copyText() {
+            let outputText = document.getElementById("output").textContent;
+            navigator.clipboard.writeText(outputText).then(() => {
+                alert("복사되었습니다!");
+            }).catch(err => {
+                alert("복사 실패: " + err);
+            });
+        }
+        
+        function saveStyle() {
+            let newStyle = document.getElementById("newStyle").value.trim();
+            if (newStyle) {
+                let savedStyles = JSON.parse(localStorage.getItem("savedStyles")) || [];
+                savedStyles.push(newStyle);
+                localStorage.setItem("savedStyles", JSON.stringify(savedStyles));
+                displaySavedStyles();
+            }
+        };
+
+        function displaySavedStyles() {
+            let savedStyles = JSON.parse(localStorage.getItem("savedStyles")) || [];
+            let savedStylesContainer = document.getElementById("saved-styles");
+            savedStylesContainer.innerHTML = "";
+            savedStyles.forEach((style, index) => {
+                let div = document.createElement("div");
+                div.classList.add("style-item");
+                let cleanStyle = style.replace(/\(#\" style=|\)/g, '');
+                div.innerHTML += `<span class="styled-text" style=${cleanStyle}">미리보기</span>`;
+                div.innerHTML += `<button onclick='copyStyle(${JSON.stringify(style)})'>복사</button>`;
+                div.innerHTML += `<button onclick='deleteStyle(${index})'>삭제</button> `;
+                savedStylesContainer.appendChild(div);
+            });
+        };
+
+        function deleteStyle(index) {
+            let savedStyles = JSON.parse(localStorage.getItem("savedStyles")) || [];
+            savedStyles.splice(index, 1);
+            localStorage.setItem("savedStyles", JSON.stringify(savedStyles));
+            displaySavedStyles();
+        };
+
+        function copyStyle(style) {
+            navigator.clipboard.writeText(style).then(() => {
+                alert("스타일이 복사되었습니다!");
+            }).catch(err => {
+                alert("복사 실패: " + err);
+            });
+        };
+
+        document.addEventListener("DOMContentLoaded", displaySavedStyles);
+    </script>
+</body>
+</html>
